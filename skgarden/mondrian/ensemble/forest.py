@@ -1,4 +1,5 @@
 import numpy as np
+import math
 from scipy import sparse
 from scipy.stats import norm
 from sklearn.base import ClassifierMixin
@@ -404,3 +405,46 @@ class MondrianForestClassifier(ForestClassifier, BaseMondrian):
         """
         return super(MondrianForestClassifier, self).partial_fit(
             X, y, classes=classes)
+
+
+class RiverMondrianForestRegressor(MondrianForestRegressor):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.feature_indices = dict()
+    
+    def learn_one(self, x: dict, y):
+        if len(self.feature_indices) == 0:
+            self.set_feature_indices(x)
+        x_list = self.feature_dict_to_list(x).reshape(1, -1)
+        self.partial_fit(x_list,[y])
+        
+    def predict_one(self, x: dict):
+        if len(self.feature_indices) == 0:
+            return 0.0
+        x_list = self.feature_dict_to_list(x).reshape(1, -1)
+        return self.predict(x_list)[0]
+    
+    def predict_interval(self, x: dict, alpha):
+        if len(self.feature_indices) == 0:
+            return [-math.inf, math.inf]
+        x_list = self.feature_dict_to_list(x).reshape(1, -1)
+        y, sigma = self.predict(x_list, return_std = True)
+        y = y[0]
+        sigma = sigma[0]
+        width = -sigma*norm.ppf(alpha/2)
+        return [y- width, y+ width]
+    
+    def feature_dict_to_list(self, x: dict):
+        x_list = np.zeros(len(self.feature_indices))
+        for key in x.keys():
+            feature_index = self.feature_indices[key]
+            x_list[feature_index] = x[key]
+        return x_list
+        
+    def set_feature_indices(self, x: dict):
+        feat_list = list(x.keys())
+        new_feature_indices = dict()
+        for idx, key in enumerate(feat_list):
+            new_feature_indices[key] = idx
+        self.feature_indices = new_feature_indices
+    
